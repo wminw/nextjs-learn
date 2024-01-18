@@ -6,6 +6,7 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { signIn } from '@/auth';
 import { AuthError } from 'next-auth';
+import bcrypt from 'bcrypt';
 
 const FormSchema = z.object({
   id: z.string(),
@@ -120,6 +121,7 @@ export async function authenticate(
   formData: FormData,
 ) {
   try {
+    await new Promise((r) => setTimeout(r, 250));
     await signIn('credentials', formData);
   } catch (error) {
     if (error instanceof AuthError) {
@@ -132,4 +134,57 @@ export async function authenticate(
     }
     throw error;
   }
+}
+
+const AccountFormSchema = z.object({
+  email: z.coerce
+    .string()
+    .email()
+    .min(6, { message: 'email must contain at least 6 characters' }),
+  password: z.coerce.string().min(3, {
+    message: 'password must contain at least 3 characters',
+  }),
+  name: z.coerce
+    .string()
+    .min(3, { message: 'name must contain at least 3 characters' }),
+});
+export type AccountState = {
+  errors?: {
+    email?: string[];
+    name?: string[];
+    password?: string[];
+  };
+  message?: string | null;
+};
+
+export async function createAccount(
+  prevState: AccountState | null,
+  formData: FormData,
+) {
+  const validatedFields = AccountFormSchema.safeParse({
+    email: formData.get('email'),
+    password: formData.get('password'),
+    name: formData.get('name'),
+  });
+
+  if (!validatedFields.success) {
+    return {
+      errors: validatedFields.error.flatten().fieldErrors,
+      message: 'Missing Fields. Failed to Create Account.',
+    };
+  }
+
+  const { email, password, name } = validatedFields.data;
+  const hashedPassword = await bcrypt.hash(password, 10);
+  try {
+    await sql`
+    INSERT INTO users (name, email, password)
+    VALUES (${name}, ${email}, ${hashedPassword})
+    `;
+  } catch (error) {
+    return {
+      message: 'Database Error: Failed to Create Account',
+    };
+  }
+  redirect('/login');
 }
