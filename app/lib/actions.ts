@@ -121,7 +121,6 @@ export async function authenticate(
   formData: FormData,
 ) {
   try {
-    await new Promise((r) => setTimeout(r, 250));
     await signIn('credentials', formData);
   } catch (error) {
     if (error instanceof AuthError) {
